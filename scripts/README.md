@@ -11,8 +11,9 @@ python3 scripts/portfolio_metadata.py          # dry run, no changes
 python3 scripts/portfolio_metadata.py --apply  # requires repo Administration: write
 ```
 
-The updater is limited to **four confirmed discrepancies**:
+The updater is limited to **five confirmed discrepancies**:
 
+- `keenetic-auto-setup`: explain that it installs Mihomo (Clash Meta) on Keenetic with Entware
 - `link-generators`: remove the absolute "keys/configs never leave browser" claim; subscription preview can use a Cloudflare Worker
 - `keenetic-knowledge-base`: set the homepage to the searchable GitHub Pages site
 - `keenetic-nvr`: add relevant Topics; retain existing topics

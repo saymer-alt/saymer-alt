@@ -13,6 +13,12 @@ import subprocess
 OWNER = "saymer-alt"
 # Only confirmed discrepancies from the 2026-10-10 metadata audit.
 CHANGES = {
+    "keenetic-auto-setup": {
+        "description": (
+            "Mihomo (Clash Meta) on Keenetic + Entware: one-command "
+            "installer, VPN routing, watchdog, diagnostics and safe updates"
+        ),
+    },
     "link-generators": {
         "description": (
             "Local-first Mihomo config & WARP MASQUE link generator; "
