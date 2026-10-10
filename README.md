@@ -32,6 +32,7 @@
 - **Выводить клиентский трафик VPS через WARP** → [amnezia-mihomo-gateway](https://github.com/saymer-alt/amnezia-mihomo-gateway): сайты видят IP WARP, но адрес VPS не скрывается от VPN-клиентов.
 - **Продиагностировать VPS, не рискуя продакшеном** → [vps-gateway-bootstrap](https://github.com/saymer-alt/vps-gateway-bootstrap): по умолчанию работает в режиме только чтения.
 - **Нужны готовые IPK-пакеты Mihomo для Entware или WARPSCOUT для ARM64** → [entware-go](https://github.com/saymer-alt/entware-go), [актуальный релиз `latest`](https://github.com/saymer-alt/entware-go/releases/tag/latest).
+- **Нужен бинарник Mihomo под старые MIPSel-роутеры (MT7621, soft-float)** → [mihomo-auto-build](https://github.com/saymer-alt/mihomo-auto-build): сборка из точного upstream-тега в GitHub Actions с проверкой SHA-256 и лицензионными уведомлениями (upstream Mihomo — GPL-3.0).
 
 ## Технологии и направления
 
@@ -45,7 +46,7 @@
 - 🌍 Работающий веб-генератор: **<https://saymer-alt.github.io/link-generators/>**
 - 📖 Техническая документация link-generators: [docs/ — архитектура, руководства, контракты тестирования](https://github.com/saymer-alt/link-generators/tree/main/docs)
 - 📚 [Сайт базы знаний (поиск и разделы)](https://saymer-alt.github.io/keenetic-knowledge-base/) · [Каталог исходных статей](https://github.com/saymer-alt/keenetic-knowledge-base/blob/main/docs/README.md) · [Документация Keenetic NVR v2.4](https://github.com/saymer-alt/keenetic-nvr/blob/main/NVR/v2/README.md)
-- 🚀 Релизы: [keenetic-auto-setup](https://github.com/saymer-alt/keenetic-auto-setup/releases) · [link-generators](https://github.com/saymer-alt/link-generators/releases) · [amnezia-mihomo-gateway](https://github.com/saymer-alt/amnezia-mihomo-gateway/releases) · [entware-go](https://github.com/saymer-alt/entware-go/releases/tag/latest)
+- 🚀 Релизы: [keenetic-auto-setup](https://github.com/saymer-alt/keenetic-auto-setup/releases) · [link-generators](https://github.com/saymer-alt/link-generators/releases) · [amnezia-mihomo-gateway](https://github.com/saymer-alt/amnezia-mihomo-gateway/releases) · [mihomo-auto-build](https://github.com/saymer-alt/mihomo-auto-build/releases) · [entware-go](https://github.com/saymer-alt/entware-go/releases/tag/latest)
 
 ## Принципы разработки
 
