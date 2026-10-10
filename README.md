@@ -20,7 +20,7 @@
 | **[keenetic-knowledge-base](https://github.com/saymer-alt/keenetic-knowledge-base)** | База знаний по Keenetic, Entware, DPI, VPN и маршрутизации: подтверждённые материалы отделены от исследований и черновиков |
 | **[amnezia-mihomo-gateway](https://github.com/saymer-alt/amnezia-mihomo-gateway)** | VPS-шлюз: клиентский трафик AmneziaWG выходит в интернет через Mihomo TUN и Cloudflare WARP — реальный IP сервера остаётся скрытым |
 | **[vps-gateway-bootstrap](https://github.com/saymer-alt/vps-gateway-bootstrap)** | Экспериментальный safety-first CLI для VPS: read-only диагностика (discover / doctor / validate) и dry-run-планирование; реальные изменения — только через жизненный цикл с подтверждением плана по SHA-256-отпечатку. Исследовательский проект, а не готовый автодеплой |
-| **[mihomo-auto-build](https://github.com/saymer-alt/mihomo-auto-build)** | Автоматизированные сборки Mihomo для MIPSel softfloat: сборки в GitHub Actions с проверкой контрольных сумм и автоматическими релизами |
+| **[entware-go](https://github.com/saymer-alt/entware-go)** | Сборка и публикация IPK-пакетов для Keenetic и других устройств с Entware: Mihomo для нескольких архитектур, WARPSCOUT для ARM64 и дополнительные утилиты. Автоматизация через GitHub Actions |
 
 ## С чего начать
 
@@ -29,7 +29,7 @@
 - **Разобраться, как это устроено** → [keenetic-knowledge-base](https://github.com/saymer-alt/keenetic-knowledge-base): разборы Keenetic, Entware, DPI-обхода и VPN.
 - **Спрятать IP VPS-шлюза за WARP** → [amnezia-mihomo-gateway](https://github.com/saymer-alt/amnezia-mihomo-gateway).
 - **Продиагностировать VPS, не рискуя продакшеном** → [vps-gateway-bootstrap](https://github.com/saymer-alt/vps-gateway-bootstrap): по умолчанию работает в режиме только чтения.
-- **Нужна сборка Mihomo под MIPSel softfloat** → готовые артефакты в [mihomo-auto-build](https://github.com/saymer-alt/mihomo-auto-build).
+- **Нужны готовые IPK-пакеты Mihomo для Entware или WARPSCOUT для ARM64** → [entware-go](https://github.com/saymer-alt/entware-go), [актуальный релиз `latest`](https://github.com/saymer-alt/entware-go/releases/tag/latest).
 
 ## Технологии и направления
 
@@ -42,7 +42,7 @@
 
 - 🌍 Работающий веб-генератор: **<https://saymer-alt.github.io/link-generators/>**
 - 📖 Техническая документация link-generators: [docs/ — архитектура, руководства, контракты тестирования](https://github.com/saymer-alt/link-generators/tree/main/docs)
-- 🚀 Релизы: [keenetic-auto-setup](https://github.com/saymer-alt/keenetic-auto-setup/releases) · [link-generators](https://github.com/saymer-alt/link-generators/releases) · [amnezia-mihomo-gateway](https://github.com/saymer-alt/amnezia-mihomo-gateway/releases) · [mihomo-auto-build](https://github.com/saymer-alt/mihomo-auto-build/releases)
+- 🚀 Релизы: [keenetic-auto-setup](https://github.com/saymer-alt/keenetic-auto-setup/releases) · [link-generators](https://github.com/saymer-alt/link-generators/releases) · [amnezia-mihomo-gateway](https://github.com/saymer-alt/amnezia-mihomo-gateway/releases) · [entware-go](https://github.com/saymer-alt/entware-go/releases/tag/latest)
 
 ## Принципы разработки
 
