@@ -34,8 +34,8 @@ class PortfolioTests(unittest.TestCase):
 
     def test_default_config_targets_only_allowlisted_repos(self):
         self.assertEqual(set(metadata.CHANGES), {
-            "link-generators", "keenetic-knowledge-base", "keenetic-nvr",
-            "entware-go",
+            "keenetic-auto-setup", "link-generators", "keenetic-knowledge-base",
+            "keenetic-nvr", "entware-go",
         })
 
     def test_traffic_rejects_unexpected_repo_metric(self):
