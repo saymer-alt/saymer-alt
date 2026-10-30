@@ -1,0 +1,95 @@
+name: Verify shared AGENTS task contract across saymer-alt
+
+# Read-only cross-repository drift detection. No writes, releases or routers.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '47 6 * * 1'
+  push:
+    branches: [main]
+    paths:
+      - AGENTS.md
+      - AGENT-TASK-CONTRACT.md
+      - .github/workflows/agent-contract-audit.yml
+  pull_request:
+    paths:
+      - AGENTS.md
+      - AGENT-TASK-CONTRACT.md
+      - .github/workflows/agent-contract-audit.yml
+
+permissions:
+  contents: read
+
+jobs:
+  contract-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify all public saymer-alt repo default branches retain AGENTS contract
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          owner = "saymer-alt"
+          required = "https://github.com/saymer-alt/saymer-alt/blob/main/AGENT-TASK-CONTRACT.md"
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": "Bearer " + os.environ["GH_TOKEN"],
+              "User-Agent": "saymer-alt-agent-contract-audit",
+              "X-GitHub-Api-Version": "2022-11-28",
+          }
+
+          def api(path):
+              req = urllib.request.Request("https://api.github.com" + path, headers=headers)
+              with urllib.request.urlopen(req, timeout=20) as resp:
+                  return json.load(resp)
+
+          repos = []
+          page = 1
+          while True:
+              found = api("/users/" + owner + "/repos?per_page=100&page=" + str(page))
+              if not found:
+                  break
+              repos.extend(found)
+              page += 1
+
+          if not repos:
+              sys.exit("FAIL: GitHub repository inventory is empty or inaccessible")
+
+          errors = []
+          for repo in repos:
+              name = repo["name"]
+              branch = repo["default_branch"]
+              path = "/repos/" + owner + "/" + urllib.parse.quote(name) + "/contents/AGENTS.md?ref=" + urllib.parse.quote(branch, safe="")
+              try:
+                  meta = api(path)
+                  assert meta.get("type") == "file" and meta.get("encoding") == "base64"
+                  content = base64.b64decode(meta["content"]).decode("utf-8")
+                  present = required in content if name != owner else "(AGENT-TASK-CONTRACT.md)" in content
+                  if not present:
+                      errors.append(name + ": AGENTS.md on " + branch + " missing the shared contract link")
+                  elif name == owner:
+                      global_policy = api("/repos/" + owner + "/" + owner + "/contents/AGENT-TASK-CONTRACT.md?ref=" + urllib.parse.quote(branch, safe=""))
+                      if global_policy.get("size", 0) < 1000:
+                          errors.append(name + ": shared master contract is missing or unexpectedly short")
+                  print(("PASS" if present else "FAIL") + ": " + name + "@" + branch)
+              except (urllib.error.URLError, ValueError, KeyError, AssertionError) as exc:
+                  errors.append(name + ": AGENTS.md unavailable/unverifiable (" + type(exc).__name__ + ")")
+                  print("FAIL: " + name + "@" + branch)
+
+          print("Audited", len(repos), "public repos; issues:", len(errors))
+          if errors:
+              print("Contract drift detected:")
+              for issue in errors:
+                  print(" -", issue)
+              sys.exit(1)
+          PY
