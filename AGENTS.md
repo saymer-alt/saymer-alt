@@ -9,4 +9,6 @@
 
 This policy is intended to be referenced from `AGENTS.md` in individual repositories. Per-repository safety/integration instructions continue to apply.
 
+**Agent execution workflow (owner decision, 03.11.2026):** For long-running assignments, queued multi-stage research, agent handoffs and independent acceptance, follow [AGENT-EXECUTION-WORKFLOW.md](AGENT-EXECUTION-WORKFLOW.md). Recheck live repo state, avoid duplicating existing fixes, use isolated Draft PRs and verify all mandatory GitHub CI on the final head SHA before claiming completion. This complements — never weakens — local rules or owner GO.
+
 **Agent engineering standard (30.10.2026):** All AI agents also follow [AGENT-ENGINEERING-STANDARD.md](AGENT-ENGINEERING-STANDARD.md) for reproducible user-path checks, blast-radius review, idempotency, measured benchmarks, honest evidence levels and precise technical writing. This policy complements project constitutions and never overrides safety requirements or owner GO.
