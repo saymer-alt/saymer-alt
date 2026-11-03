@@ -48,6 +48,10 @@
 - 📚 [Сайт базы знаний (поиск и разделы)](https://saymer-alt.github.io/keenetic-knowledge-base/) · [Каталог исходных статей](https://github.com/saymer-alt/keenetic-knowledge-base/blob/main/docs/README.md) · [Документация Keenetic NVR v2.4](https://github.com/saymer-alt/keenetic-nvr/blob/main/NVR/v2/README.md)
 - 🚀 Релизы: [keenetic-auto-setup](https://github.com/saymer-alt/keenetic-auto-setup/releases) · [link-generators](https://github.com/saymer-alt/link-generators/releases) · [amnezia-mihomo-gateway](https://github.com/saymer-alt/amnezia-mihomo-gateway/releases) · [mihomo-auto-build](https://github.com/saymer-alt/mihomo-auto-build/releases) · [entware-go](https://github.com/saymer-alt/entware-go/releases/tag/latest)
 
+## Методика работы с ИИ-агентами
+
+Общие правила не привязаны к конкретной модели или подписке: [постановка заданий](AGENT-TASK-CONTRACT.md), [инженерная проверка](AGENT-ENGINEERING-STANDARD.md), [обоснование разработки](PROOF-BEFORE-BUILD.md) и [длительный цикл работы, очереди заданий, независимое ревью и передача другому агенту](AGENT-EXECUTION-WORKFLOW.md). Для каждого проекта обязательны и его собственные AGENTS.md / safety-контракты.
+
 ## Принципы разработки
 
 - **Простота по умолчанию.** До разработки сравнивать ручной путь, минимальную функцию и расширенную архитектуру; при росте сложности нужна повторная проверка необходимости. [Сквозной контракт для всех проектов — SIMPLICITY-FIRST](SIMPLICITY-FIRST.md).
