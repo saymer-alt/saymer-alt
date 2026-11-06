@@ -14,6 +14,16 @@ Design contract (issue #16):
   stored cursor ("last_seen");
 - default-branch renames, deleted/recreated tags and force-pushes produce
   either an UNKNOWN note or a single honest delta — never a false event;
+- a state block that is present but unreadable/invalid fails the run loudly
+  (exit 2) and leaves the issue untouched for manual recovery — never a
+  silent re-baseline and never a second block;
+- the digest comment is delivered BEFORE the state is saved: a failed save
+  after delivery is recovered next run via the digest fingerprint (no
+  duplicate), a failed delivery leaves the state stale so the delta is
+  re-detected and re-delivered exactly once;
+- release identity is the tag name AND the commit proven via the git ref
+  endpoint (annotated tags are peeled); if the API cannot prove the target,
+  the target is UNKNOWN — never a tag-name-only identity;
 - untrusted upstream text is never fetched (no README/commit messages);
   every emitted string is validated or replaced by a placeholder;
 - request budget is capped; over-budget targets become UNKNOWN, not silent.
@@ -27,12 +37,14 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import os
 import re
 import sys
 import urllib.error
 import urllib.request
+from urllib.parse import quote
 from datetime import datetime, timezone
 
 REPO = "saymer-alt/saymer-alt"
@@ -43,7 +55,11 @@ MAX_REQUESTS = 60          # hard cap incl. issue reads/writes
 MAX_DIGEST_ITEMS = 10      # digest stays short; overflow is counted, not hidden silently
 MAX_BODY_BYTES = 96 * 1024 # refuse to write an oversized issue body
 TIMEOUT = 20               # seconds per HTTP request
-DIGEST_MARKER = "<!-- upstream-watch-digest -->"
+DIGEST_FP_RE = re.compile(r"<!-- upstream-watch-digest h=([0-9a-f]{16}) -->")
+# Dedupe window for digest re-delivery: only the newest digest comment is
+# compared against the fingerprint (a state save that failed after delivery
+# is always the most recent comment at recovery time).
+DIGEST_DEDUPE_PAGE = 100
 
 SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 SAFE_TOKEN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,63}$")
@@ -107,6 +123,13 @@ class ApiError(Exception):
         self.status = status
 
 
+class StateCorrupt(Exception):
+    """The issue body has state markers but the block is unreadable or
+    structurally wrong. The run must fail loudly and leave the original
+    body untouched: silent re-baseline would erase recoverable state and a
+    second block would fork the state machine."""
+
+
 def make_fetcher(token: str | None, budget: Budget):
     """Returns fetch_json(url) -> decoded JSON, with retries=0 and a hard cap."""
 
@@ -152,6 +175,29 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def peeled_commit(repo: str, ref: object, fetch_json) -> tuple[str | None, str]:
+    """Resolves a `git/ref/tags/<tag>` payload to the commit SHA it ultimately
+    names, peeling annotated tag objects (bounded depth). Returns
+    (sha, note); sha is None when the target cannot be proven."""
+    obj = ref.get("object") if isinstance(ref, dict) else None
+    sha = obj.get("sha") if isinstance(obj, dict) else None
+    kind = obj.get("type") if isinstance(obj, dict) else None
+    if not isinstance(sha, str) or not SHA_RE.match(sha):
+        return None, "tag ref unreadable"
+    for _ in range(3):  # annotated-tag peel depth is bounded by budget
+        if kind == "commit":
+            return sha, "commit"
+        if kind != "tag":
+            return None, f"tag target type {kind!r}"
+        tag_object = fetch_json(f"https://api.github.com/repos/{repo}/git/tags/{sha}")
+        obj = tag_object.get("object") if isinstance(tag_object, dict) else None
+        sha = obj.get("sha") if isinstance(obj, dict) else None
+        kind = obj.get("type") if isinstance(obj, dict) else None
+        if not isinstance(sha, str) or not SHA_RE.match(sha):
+            return None, "tag object unreadable"
+    return None, "tag nesting too deep"
+
+
 def observe(target: dict, fetch_json) -> dict:
     """One read-only observation of one target. Never raises: failures become
     {'state': 'UNKNOWN', ...} so the caller's cursor logic stays simple."""
@@ -174,13 +220,17 @@ def observe(target: dict, fetch_json) -> dict:
             tag = release.get("tag_name")
             if not isinstance(tag, str) or not SAFE_TOKEN_RE.match(tag):
                 return {"state": "UNKNOWN", "note": "unparseable release tag"}
-            target_sha = release.get("target_commitish")
-            sha = target_sha if isinstance(target_sha, str) and SHA_RE.match(target_sha) else ""
-            # Identity is tag AND commit: a re-pointed release must register
-            # as a change even when a new release lands on the same commit
-            # SHA as the previous one.
-            value = f"tag:{tag}@{sha}" if sha else f"tag:{tag}"
-            return {"state": "SEEN", "value": value, "label": tag,
+            # `target_commitish` is a branch name or empty for most releases
+            # and proves nothing about where the tag points. Identity must be
+            # the real git tag target: read the ref, peel annotated tags, and
+            # stay UNKNOWN when the commit cannot be proven — never fall back
+            # to a tag-name-only identity.
+            ref = fetch_json(
+                f"https://api.github.com/repos/{repo}/git/ref/tags/{quote(tag, safe='')}")
+            sha, note = peeled_commit(repo, ref, fetch_json)
+            if sha is None:
+                return {"state": "UNKNOWN", "note": f"tag target not provable ({note})"}
+            return {"state": "SEEN", "value": f"tag:{tag}@{sha}", "label": tag,
                     "kind": "release", "default_branch": default_branch}
         if kind == "file_blob":
             blob = fetch_json(
@@ -213,21 +263,39 @@ def fresh_state() -> dict:
 
 
 def parse_state(body: str) -> dict | None:
-    """Extracts the machine block; None means 'no valid state' -> baseline."""
+    """Returns the state dict, or None when the body has no state block at
+    all (first run -> baseline). Raises StateCorrupt when markers exist but
+    the block is unreadable or structurally wrong — the caller must fail the
+    run and never modify the body in that case."""
+    begins, ends = body.count(STATE_BEGIN), body.count(STATE_END)
+    if begins == 0 and ends == 0:
+        return None
+    if begins != 1 or ends != 1:
+        raise StateCorrupt(f"expected exactly one state block, found {begins} begin / {ends} end markers")
     begin, end = body.find(STATE_BEGIN), body.find(STATE_END)
-    if begin == -1 or end == -1 or end < begin:
-        return None
+    if end < begin:
+        raise StateCorrupt("state end marker precedes begin marker")
     chunk = body[begin + len(STATE_BEGIN):end]
-    match = re.search(r"```json\s*(\{.*\})\s*```", chunk, re.DOTALL)
-    if not match:
-        return None
+    fences = re.findall(r"```json\s*(\{.*?\})\s*```", chunk, re.DOTALL)
+    if len(fences) != 1:
+        raise StateCorrupt(f"state block must contain exactly one json fence, found {len(fences)}")
     try:
-        state = json.loads(match.group(1))
-    except ValueError:
-        return None
-    if not isinstance(state, dict) or state.get("version") != STATE_VERSION \
-            or not isinstance(state.get("targets"), dict):
-        return None
+        state = json.loads(fences[0])
+    except ValueError as exc:
+        raise StateCorrupt(f"state json is not parseable: {exc}") from exc
+    if not isinstance(state, dict):
+        raise StateCorrupt("state json is not an object")
+    if state.get("version") != STATE_VERSION:
+        raise StateCorrupt(f"state version must be {STATE_VERSION!r}")
+    targets = state.get("targets")
+    if not isinstance(targets, dict):
+        raise StateCorrupt("state targets must be an object")
+    for target_id, entry in targets.items():
+        if not isinstance(entry, dict):
+            raise StateCorrupt(f"target {target_id!r} entry is not an object")
+        for field in ("last_seen", "reported"):
+            if field in entry and entry[field] is not None and not isinstance(entry[field], str):
+                raise StateCorrupt(f"target {target_id!r} field {field!r} must be a string or null")
     return state
 
 
@@ -238,20 +306,37 @@ def render_state(state: dict) -> str:
 
 
 def compare_link(target: dict, old: str, new: str) -> str:
-    def strip(value: str) -> str:
-        # "blob:<sha>" and "tag:<name>@<sha>" carry a commit SHA for compare.
-        if value.startswith("blob:"):
-            return value[5:]
+    def commit_part(value: str) -> str:
+        # Only values carrying a real commit SHA may drive /compare/.
+        # "blob:<sha>" is the git object hash of file CONTENT, not a commit:
+        # a /compare/ built from it would 404, so blob values never strip.
         if value.startswith("tag:"):
-            tail = value[4:].rpartition("@")[2]
-            return tail
+            return value[4:].rpartition("@")[2]
+        if value.startswith("blob:"):
+            return ""
         return value
-    a, b = strip(old), strip(new)
+    a, b = commit_part(old), commit_part(new)
     if SHA_RE.match(a) and SHA_RE.match(b) and a != b:
         return f"https://github.com/{target['repo']}/compare/{a[:12]}...{b[:12]}"
+    if old.startswith("blob:") or new.startswith("blob:"):
+        # Blob deltas point at the file's commit history instead of a fake
+        # compare between content hashes.
+        branch = safe_token(target.get("branch", ""))
+        path = quote(target.get("path", ""), safe="/")
+        if path:
+            return f"https://github.com/{target['repo']}/commits/{branch}/{path}"
+        return f"https://github.com/{target['repo']}/commits/{branch}"
     if old.startswith("tag:") or new.startswith("tag:"):
         return f"https://github.com/{target['repo']}/releases"
     return f"https://github.com/{target['repo']}/commits"
+
+
+def _tag_enriched(old: str, new: str) -> bool:
+    """True when `new` names the same release tag as `old` but now carries
+    the proven commit sha — the one-time identity migration after the
+    git-ref check was introduced, not a tag move."""
+    return (isinstance(old, str) and old.startswith("tag:") and "@" not in old
+            and isinstance(new, str) and new.startswith(old + "@"))
 
 
 def classify(observed: dict, previous: dict | None) -> tuple[str, bool]:
@@ -266,11 +351,13 @@ def classify(observed: dict, previous: dict | None) -> tuple[str, bool]:
         return "REVIEWED", False
     last_seen = previous.get("last_seen")
     reported = previous.get("reported")
+    keep_pending = "CHANGED_PENDING_REVIEW" if previous.get("state") == "CHANGED_PENDING_REVIEW" else "UNCHANGED"
     if value == last_seen or value == reported:
         # A still-unreviewed delta stays pending on every unchanged rerun; a
         # reviewed/baselined target simply reports UNCHANGED.
-        return ("CHANGED_PENDING_REVIEW"
-                if previous.get("state") == "CHANGED_PENDING_REVIEW" else "UNCHANGED"), False
+        return keep_pending, False
+    if _tag_enriched(last_seen, value) or _tag_enriched(reported, value):
+        return keep_pending, False
     return "CHANGED_PENDING_REVIEW", True
 
 
@@ -291,11 +378,17 @@ def run(args, fetch_json=None, github=None, token: str | None = None,
             body = handle.read()
     else:
         body = ""
-    state = parse_state(body) if body else None
+    try:
+        state = parse_state(body) if body else None
+    except StateCorrupt as exc:
+        # The original body is left byte-for-byte untouched so a human can
+        # recover the state block manually; no re-baseline, no second block.
+        print(f"FAIL: state block present but unreadable/invalid — issue left "
+              f"untouched for manual recovery: {exc}", file=sys.stderr)
+        return 2
     first_run = state is None
     if first_run:
         state = fresh_state()
-
     digest_items, unknown, requests_before = [], [], budget.used
     for target in TARGETS:
         previous = state["targets"].get(target["id"])
@@ -358,21 +451,48 @@ def run(args, fetch_json=None, github=None, token: str | None = None,
 
     if args.dry_run:
         return 1 if unknown else 0
-    if github is None:
-        if not args.state_file:
-            print("no --issue/--state-file: state not persisted", file=sys.stderr)
-            return 2
-        with open(args.state_file, "w", encoding="utf-8") as handle:
-            handle.write(new_body)
-    else:
-        github.update_issue_body(new_body)
-        if digest_items:
-            github.add_comment(render_digest(digest_items, report))
+    try:
+        if github is None:
+            if not args.state_file:
+                print("no --issue/--state-file: state not persisted", file=sys.stderr)
+                return 2
+            with open(args.state_file, "w", encoding="utf-8") as handle:
+                handle.write(new_body)
+        else:
+            # Digest first, state save second. Two failure points, one remedy:
+            # - delivery fails -> nothing was saved, the stale cursor makes the
+            #   next run re-detect the delta and re-deliver exactly once;
+            # - delivery succeeded but the save failed -> the next run
+            #   re-detects the same delta, finds the orphan digest as the
+            #   newest digest comment (same fingerprint) and skips the
+            #   duplicate while saving the state.
+            if digest_items:
+                if github.latest_digest_fingerprint() == digest_fingerprint(digest_items):
+                    print("digest for this exact delta is already the newest "
+                          "digest comment (previous run saved no state); not "
+                          "posting a duplicate", file=sys.stderr)
+                else:
+                    github.add_comment(render_digest(digest_items, report))
+            github.update_issue_body(new_body)
+    except Exception as exc:  # write path must fail visibly, never half-silently
+        print(f"issue/state write failed after observation: {exc}", file=sys.stderr)
+        return 2
     return 1 if unknown else 0
 
 
+def digest_fingerprint(items: list) -> str:
+    """Content-addressed identity of a digest: the same (target, old, new)
+    delta set always hashes to the same value, so a re-detected orphan
+    digest can be recognised without storing extra state."""
+    canonical = json.dumps(
+        [[item["id"], item["old"], item["new"]]
+         for item in sorted(items, key=lambda x: x["id"])],
+        ensure_ascii=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()[:16]
+
+
 def render_digest(items: list, report: dict) -> str:
-    lines = [DIGEST_MARKER,
+    lines = [f"<!-- upstream-watch-digest h={digest_fingerprint(items)} -->",
              "## Upstream watch — changes pending review",
              f"_Run {report['run']} · machine detector only: useful? implemented? "
              "license? → Proof Before Build and the trackers. Linked upstream "
@@ -414,6 +534,18 @@ def make_github(args, token: str | None, budget: Budget):
     class Github:
         def get_issue_body(self) -> str:
             return str(call("GET", base).get("body") or "")
+
+        def latest_digest_fingerprint(self) -> str | None:
+            # Newest-first page: the only digest that can suppress a duplicate
+            # is the most recent one (an orphan from a run whose state save
+            # failed right after delivery).
+            comments = call("GET", base + f"/comments?per_page={DIGEST_DEDUPE_PAGE}"
+                            "&sort=created&direction=desc")
+            for comment in comments:
+                match = DIGEST_FP_RE.search(str(comment.get("body") or ""))
+                if match:
+                    return match.group(1)
+            return None
 
         def update_issue_body(self, body: str) -> None:
             call("PATCH", base, {"body": body})

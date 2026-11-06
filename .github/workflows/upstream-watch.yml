@@ -36,6 +36,9 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           python3 scripts/upstream_watch.py --issue 17
-      # Exit code 1 = some targets UNKNOWN (API/rate-limit/404): the run stays
-      # visibly red and the stored cursor is not advanced. Fix or rerun; do
-      # not treat a red run as "checked".
+      # Exit codes: 0 = all targets observed; 1 = some targets UNKNOWN
+      # (API/rate-limit/404: the stored cursor is not advanced); 2 = the
+      # state block is unreadable or the issue/state write failed — the
+      # issue body is left untouched for manual recovery and the digest
+      # is re-delivered without duplicates on the next run. Do not treat
+      # a red run as "checked".
