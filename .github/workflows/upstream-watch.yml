@@ -1,0 +1,44 @@
+name: Upstream watch (weekly digest)
+
+# One cheap weekly detector for upstream deltas (issue #16): exact refs/SHAs
+# only, no LLM, no server. Expert review stays with the trackers and agents.
+# Schedule times are best-effort on GitHub; workflow_dispatch is the reliable
+# manual trigger. Until this workflow is MERGED and has completed one real
+# run, monitoring is IMPLEMENTED but NOT ACTIVE.
+
+on:
+  schedule:
+    - cron: '23 6 * * 1' # Mondays ~06:23 UTC, best effort
+  workflow_dispatch:
+
+# Read-only towards all upstream repos; the only write is the single central
+# issue of THIS repository (state machine block + at most one digest comment
+# per run with real findings). No cross-repo access, no secrets, no PAT.
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: upstream-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Observe upstreams and update the central issue
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/upstream_watch.py --issue 17
+      # Exit codes: 0 = all targets observed; 1 = some targets UNKNOWN
+      # (API/rate-limit/404: the stored cursor is not advanced); 2 = the
+      # state block is unreadable or the issue/state write failed — the
+      # issue body is left untouched for manual recovery and the digest
+      # is re-delivered without duplicates on the next run. Do not treat
+      # a red run as "checked".
