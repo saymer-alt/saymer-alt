@@ -17,7 +17,7 @@
 - Merge, release, delete, публикация IPK, обновление live-устройств/VPS и небезопасные изменения требуют самостоятельного owner GO. Правила бюджетирования **не** дают этих разрешений.
 - `CI PASS != QEMU PASS != FIELD PASS != PUBLISHED`; документировать состояние точно.
 - Корневой `AGENTS.md` репозитория должен содержать **одну краткую ссылку**, без копирования этого документа. Подробности читать по запросу для затронутой задачи.
-- Для KAS дополнительно действует локальный [agent-token-efficiency](https://github.com/saymer-alt/keenetic-auto-setup-dev/blob/development/docs/agent-token-efficiency.md); для Entware см. его локальную политику. Локальные более строгие ограничения и запреты всегда в силе.
+- Для KAS дополнительно действует локальный [agent-token-efficiency](https://github.com/saymer-alt/keenetic-auto-setup/blob/main/docs/agent-token-efficiency.md); для Entware см. его локальную политику. Локальные более строгие ограничения и запреты всегда в силе.
 
 Связанные глобальные документы: [AGENT-TASK-CONTRACT](AGENT-TASK-CONTRACT.md), [AGENT-EXECUTION-WORKFLOW](AGENT-EXECUTION-WORKFLOW.md), [PROOF-BEFORE-BUILD](PROOF-BEFORE-BUILD.md).
 
